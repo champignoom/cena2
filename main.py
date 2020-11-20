@@ -1,13 +1,8 @@
 import wx
+import wx.dataview
 from pathlib import Path
-from contest import Contest, ContestException
+from contest import (Contest, ContestException, DATA_DIR_NAME, SRC_DIR_NAME, CONTEST_CONFIG_FILE_NAME)
 
-
-DATA_DIR_NAME = 'data'
-SRC_DIR_NAME = 'src'
-SAMPLE_DIR_NAME = 'sample'
-PROBLEMS_FILE_NAME = 'problems.pdf'
-CONTEST_CONFIG_FILE_NAME = 'config.yaml'
 
 def menu_bar(menus):
     bar = wx.MenuBar()
@@ -47,15 +42,15 @@ class MainFrame(wx.Frame):
                 self.menu_item('&Open contest', handler=self._open_contest),
                 self.menu_item('&Close contest', handler=self._close_contest),
                 wx.MenuItem(),
-                self.menu_item('&Properties'),
+                self.menu_item('&Properties', handler=self._properties),
                 ]),
             ('&Contest', [
-                self.menu_item('&Participate'),
-                self.menu_item('&Host'),
+                self.menu_item('&Participate', handler=self._participate_contest),
+                self.menu_item('&Host', handler=self._host_contest),
                 ]),
             ('&Help', [
-                self.menu_item('&Manual'),
-                self.menu_item('&About'),
+                self.menu_item('&Manual', handler=self._show_manual),
+                self.menu_item('&About', handler=self._show_about),
                 ]),
             ]))
 
@@ -92,17 +87,49 @@ class MainFrame(wx.Frame):
             self._render_contest()
 
     def _render_contest(self):
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        self.SetSizer(sizer)
+        frame_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.SetSizer(frame_sizer)
+
         self._contest_panel = wx.Panel(self)
-        self._contest_panel.SetBackgroundColour(wx.RED)
-        sizer.Add(self._contest_panel, 1, wx.EXPAND)
+        # self._contest_panel.SetBackgroundColour(wx.RED)
+        frame_sizer.Add(self._contest_panel, 1, wx.EXPAND)
+
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        self._contest_panel.SetSizer(panel_sizer)
+        #self._score_sheet = Contest._fake_data_view(self._contest_panel)
+        self._score_sheet = Contest._fake_grid(self._contest_panel)
+        self._score_sheet.SetMinSize((0,0))  # otherwise it grows greedly
+        panel_sizer.Add(self._score_sheet, wx.SizerFlags(1).Expand())
+
+        status_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        panel_sizer.Add(status_sizer, wx.SizerFlags(0).Expand())
+        self.status_box = wx.StaticBox(self._contest_panel, label="Details")
+        self.status_box.SetMinSize((0,40))
+        status_sizer.Add(self.status_box, wx.SizerFlags(1).Expand())
+        self.btn_judge_selected = wx.Button(self._contest_panel, label="Judge selected")
+        status_sizer.Add(self.btn_judge_selected, wx.SizerFlags(0).Expand())
+
         self.Layout()
 
     def _close_contest(self, ev):
         # TODO: disable the menu item after closing contest
         Contest.close()
         self._contest_panel.Destroy()
+
+    def _properties(self, ev):
+        raise NotImplementedError
+
+    def _participate_contest(self, ev):
+        raise NotImplementedError
+
+    def _host_contest(self, ev):
+        raise NotImplementedError
+
+    def _show_manual(self, ev):
+        raise NotImplementedError
+
+    def _show_about(self, ev):
+        raise NotImplementedError
 
 
 def main():

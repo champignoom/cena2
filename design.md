@@ -1,6 +1,10 @@
 Cena2 design doc
 =======
 
+## Sandbox
+
+Do not bother until something bad happens.
+
 ## Menu
 
 - Files
