@@ -20,7 +20,7 @@ class MyRenderer(wx.grid.GridCellRenderer):
 
     def Draw(self, grid, attr, dc, rect, row, col, is_selected):
         pen_width = 3
-        is_selected = is_selected and self.__table.is_selectable(row, col)
+        # is_selected = is_selected and self.__table.is_selectable(row, col)
 
         dc.SetPen(wx.Pen())
         color = grid.GetSelectionBackground() if is_selected else attr.GetBackgroundColour()
@@ -112,6 +112,7 @@ class ScoreSheet(wx.grid.Grid):
 
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL, self.check_select_cell)
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self.check_select_range)
+        # self.Bind(wx.EVT_LEFT_DOWN, self.process_mouse)
 
     def dodge_first_column(self, row):
         if self.__table.GetNumberCols() > 1:
@@ -125,7 +126,11 @@ class ScoreSheet(wx.grid.Grid):
     def check_select_range(self, ev):
         if ev.Selecting() and ev.GetLeftCol()==0:
             # ev.Veto()   # not working
-            pass
+            self.DeselectCol(0)
+
+# not working
+#    def process_mouse(self, ev):
+#        print(ev.GetPosition(), self.CalcUnscrolledPosition(ev.GetPosition()), flush=True)
 
 class Problem:
     def __init__(self, data):
