@@ -1,7 +1,10 @@
 import wx
 import wx.dataview
 from pathlib import Path
-from contest import (Contest, ContestException, DATA_DIR_NAME, SRC_DIR_NAME, CONTEST_CONFIG_FILE_NAME)
+from contest import (
+        Contest, ContestError, ScoreSheet,
+        DATA_DIR_NAME, SRC_DIR_NAME, CONTEST_CONFIG_FILE_NAME,
+        )
 
 
 def menu_bar(menus):
@@ -55,9 +58,12 @@ class MainFrame(wx.Frame):
             ]))
 
     def _open_contest_prepare(self):
-        dialog = wx.DirDialog(self, defaultPath=".")
-        dialog.ShowModal()
-        path = dialog.GetPath()
+        if False:
+            dialog = wx.DirDialog(self, defaultPath=".")
+            dialog.ShowModal()
+            path = dialog.GetPath()
+        else:
+            path = './sample_contest'
 
         if not path:
             return
@@ -80,34 +86,34 @@ class MainFrame(wx.Frame):
 
     def _open_contest(self, ev):
         try:
-            0 and self._open_contest_prepare()
-        except ContestException:
+            self._open_contest_prepare()
+        except ContestError:
             pass
         else:
             self._render_contest()
 
     def _render_contest(self):
-        frame_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.SetSizer(frame_sizer)
+        self.SetSizer(wx.BoxSizer(wx.VERTICAL))
 
-        self._contest_panel = wx.Panel(self)
-        # self._contest_panel.SetBackgroundColour(wx.RED)
-        frame_sizer.Add(self._contest_panel, 1, wx.EXPAND)
+        splitter_window = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE | wx.SP_BORDER)
+        self.GetSizer().Add(splitter_window, wx.SizerFlags(1).Expand().Border(wx.ALL, 10))
 
-        panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        self._contest_panel.SetSizer(panel_sizer)
-        #self._score_sheet = Contest._fake_data_view(self._contest_panel)
-        self._score_sheet = Contest._fake_grid(self._contest_panel)
+        self._score_sheet = ScoreSheet(splitter_window, Contest.singleton)
         self._score_sheet.SetMinSize((0,0))  # otherwise it grows greedly
-        panel_sizer.Add(self._score_sheet, wx.SizerFlags(1).Expand())
+        splitter_window.Initialize(self._score_sheet)
 
-        status_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        panel_sizer.Add(status_sizer, wx.SizerFlags(0).Expand())
-        self.status_box = wx.StaticBox(self._contest_panel, label="Details")
+        tmp_panel = wx.Panel(splitter_window)
+        tmp_panel.SetSizer(wx.BoxSizer(wx.HORIZONTAL))
+        self.status_box = wx.StaticBox(tmp_panel)
         self.status_box.SetMinSize((0,40))
-        status_sizer.Add(self.status_box, wx.SizerFlags(1).Expand())
-        self.btn_judge_selected = wx.Button(self._contest_panel, label="Judge selected")
-        status_sizer.Add(self.btn_judge_selected, wx.SizerFlags(0).Expand())
+        tmp_panel.GetSizer().Add(self.status_box, wx.SizerFlags(1).Expand().Border(wx.RIGHT, 5))
+        btn_sizer = wx.BoxSizer(wx.VERTICAL)
+        tmp_panel.GetSizer().Add(btn_sizer, wx.SizerFlags(0).Expand())
+        self.btn_judge_selected = wx.Button(tmp_panel, label="Judge selected")
+        btn_sizer.AddSpacer(10)
+        btn_sizer.Add(self.btn_judge_selected)
+
+        splitter_window.SplitHorizontally(self._score_sheet, tmp_panel, -60)
 
         self.Layout()
 
