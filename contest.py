@@ -1,3 +1,4 @@
+import re
 import yaml
 import wx.dataview
 import wx.grid
@@ -90,13 +91,20 @@ class ScoreGridTable(wx.grid.GridTableBase):
     def is_selectable(self, row, col):
         return col>0
 
+    def get_participant(self, row):
+        return self.contest.participants[self.ordered_names[row]]
+
+    def get_problem(self, col):
+        assert col>0
+        return self.contest.config.problems[col-1]
+
 
 class ScoreSheet(wx.grid.Grid):
     def __init__(self, parent, contest):
         super().__init__(parent)
         self.EnableEditing(False)
-        self.DisableDragRowSize()
-        self.DisableDragColSize()
+        # self.DisableDragRowSize()
+        # self.DisableDragColSize()
 
         self.SetCornerLabelValue("I'm corner")
 
@@ -114,6 +122,21 @@ class ScoreSheet(wx.grid.Grid):
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self.check_select_range)
         # self.Bind(wx.EVT_LEFT_DOWN, self.process_mouse)
 
+        print('selectionforeground={}, cellbackground={}, '.format(self.GetSelectionForeground(), self.GetDefaultCellBackgroundColour()), flush=True)
+        # self.SetSelectionForeground(wx.RED)
+        self.SetCellHighlightPenWidth(0)  # no cursor border
+
+        self._selection_change_handler = None
+
+        self.GetGridWindow().Bind(wx.EVT_LEFT_DOWN, self.check_click)
+
+    def check_click(self, ev):
+        cell = self.XYToCell(self.CalcUnscrolledPosition(ev.GetPosition()))
+        if cell[0] >= 0:
+            ev.Skip()
+            return
+        self.ClearSelection()
+
     def dodge_first_column(self, row):
         if self.__table.GetNumberCols() > 1:
             self.SetGridCursor(row, 1)
@@ -122,40 +145,72 @@ class ScoreSheet(wx.grid.Grid):
         if ev.Selecting() and ev.GetCol()==0:
             ev.Veto()
             self.dodge_first_column(ev.GetRow())
+            return
+
+        if not self.IsSelection():
+            self.SelectBlock(ev.GetRow(), ev.GetCol(), ev.GetRow(), ev.GetCol())
 
     def check_select_range(self, ev):
         if ev.Selecting() and ev.GetLeftCol()==0:
             # ev.Veto()   # not working
             self.DeselectCol(0)
+            return
+
+        self._selection_change_handler and self._selection_change_handler(self.IsSelection())
+
+    def get_selected(self):
+        selected_cells = []
+        if self.IsSelection():
+            for tl, br in zip(self.GetSelectionBlockTopLeft(), self.GetSelectionBlockBottomRight()):
+                for i in range(tl.GetRow(), br.GetRow()+1):
+                    for j in range(tl.GetCol(), br.GetCol()+1):
+                        selected_cells.append((i,j))
+            selected_cells.sort()
+        else:
+            selected_cells.append((self.GetGridCursorRow(), self.GetGridCursorCol()))
+
+        return ((i, j, self.__table.get_participant(i), self.__table.get_problem(j)) for i,j in selected_cells)
 
 # not working
 #    def process_mouse(self, ev):
 #        print(ev.GetPosition(), self.CalcUnscrolledPosition(ev.GetPosition()), flush=True)
 
+
+class TestCase:
+    def __init__(self, input_file_path, output_file_path):
+        self.input_file_path = input_file_path
+        self.output_file_path = output_file_path
+
+
 class Problem:
-    def __init__(self, data):
+    def __init__(self, data_path, data):
         if isinstance(data, str):
             self.name = data
+            self.tmp_testcases = []
+
+            data_path /= self.name
+            if not data_path.is_dir():
+                return
+
+            input_file_paths = set(data_path.glob(self.name+'*.in')) & {p.with_suffix('.in') for p in data_path.glob(self.name+'*.out')}
+            input_file_paths = sorted(input_file_paths, key=lambda s: re.split(r'(\d+)', s.name))
+            self.tmp_testcases = [TestCase(i, i.with_suffix('.out')) for i in input_file_paths]
         else:
             raise NotImplementedError
 
+    def get_testcases(self):
+        return self.tmp_testcases
+
+    def __repr__(self):
+        return '<Problem {}>'.format(self.name)
+
 
 class ContestConfig:
-    def __init__(self, data):
-        self.problems = [Problem(p) for p in data]
+    def __init__(self, contest_path, data):
+        self.problems = [Problem(contest_path/DATA_DIR_NAME, p) for p in data]
 
     def dump(self, path):
         raise NotImplementedError
-
-    @staticmethod
-    def from_names(names):
-        return ContestConfig(names)
-
-    @staticmethod
-    def from_file(path):
-        with open(path) as f:
-            data = yaml.load(f, Loader=yaml.CLoader)
-        return ContestConfig(data)
 
 
 class ProblemResult:
@@ -194,6 +249,17 @@ class Result:
     def total(self):
         return self._score
 
+    def remove_problem(self, name):
+        if name not in self.problems:
+            return
+        self._score -= self.problems[name].total()
+        del self.problems[name]
+
+    def set_problem(self, name, r):
+        self.remove_problem(name)
+        self.problems[name] = r
+        self._score += r.total()
+
 
 class Participant:
     def __init__(self, path):
@@ -203,13 +269,16 @@ class Participant:
             self.result = Result.from_path(path/RESULT_FILE_NAME)
         else:
             self.result = Result.fresh()
+
+    def __repr__(self):
+        return '<Participant {}>'.format(self.name)
         
 
 class Contest:
     singleton = None
 
     def __init__(self, path, config):
-        self._path = path
+        self.path = path
         self.config = config
         self.participants = {p.name: Participant(p) for p in (path/SRC_DIR_NAME).iterdir()}
 
@@ -220,18 +289,20 @@ class Contest:
         problem_names = []
         for sub in (path/DATA_DIR_NAME).iterdir():
             if not sub.is_dir():
-                raise ContestConfig('not a directory: {}'.format(sub))
+                raise ContestError('not a directory: {}'.format(sub))
             if not Contest.is_valid_name(sub.name):
-                raise ContestConfig('not a valid name: {}'.format(sub.name))
+                raise ContestError('not a valid name: {}'.format(sub.name))
             problem_names.append(sub.name)
 
-        config = ContestConfig.from_names(problem_names)
-        config.dump(path)
+        config = ContestConfig(path, problem_names)
+        config.dump(path / CONTEST_CONFIG_FILE_NAME)
         Contest.singleton = Contest(path, config)
 
     @staticmethod
     def open(path):
-        config = ContestConfig.from_file(path / CONTEST_CONFIG_FILE_NAME)
+        with open(path/CONTEST_CONFIG_FILE_NAME) as f:
+            data = yaml.load(f, Loader=yaml.CLoader)
+        config = ContestConfig(path, data)
         Contest.singleton = Contest(path, config)
 
     @staticmethod
@@ -258,9 +329,9 @@ class Contest:
     def _fake_grid(parent):
         grid = wx.grid.Grid(parent)
         grid.EnableEditing(False)
-        grid.DisableDragRowSize()
-        grid.DisableDragColSize()
-        # grid.DisableDragGridSize()
+        # grid.DisableDragRowSize()
+        # grid.DisableDragColSize()
+        # grid.DisableDragGridSize()  # not working
 
         grid.SetCornerLabelValue("I'm corner")
 
