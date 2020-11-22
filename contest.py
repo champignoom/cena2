@@ -152,8 +152,6 @@ class ScoreSheet(wx.grid.Grid):
             self.dodge_first_column(ev.GetRow())
             return
 
-        self._selection_change_handler((self.__table.get_participant(ev.GetRow()), self.__table.get_problem(ev.GetCol())))
-
         if not self.IsSelection():
             self.SelectBlock(ev.GetRow(), ev.GetCol(), ev.GetRow(), ev.GetCol())
 
@@ -163,8 +161,11 @@ class ScoreSheet(wx.grid.Grid):
             self.DeselectCol(0)
             return
 
+        self._selection_change_handler(self.IsSelection())
         if not self.IsSelection():
-            self._selection_change_handler(None)
+            self._focus_changed(None)
+        elif ev.GetLeftCol()==ev.GetRightCol() and ev.GetTopRow()==ev.GetBottomRow():
+            self._focus_changed((self.__table.get_participant(ev.GetTopRow()), self.__table.get_problem(ev.GetLeftCol())))
 
     def get_selected(self):
         selected_cells = []
