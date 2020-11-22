@@ -129,13 +129,18 @@ class ScoreSheet(wx.grid.Grid):
         self._selection_change_handler = None
 
         self.GetGridWindow().Bind(wx.EVT_LEFT_DOWN, self.check_click)
+        self.GetGridWindow().Bind(wx.EVT_CHAR, self.check_key)
 
     def check_click(self, ev):
         cell = self.XYToCell(self.CalcUnscrolledPosition(ev.GetPosition()))
-        if cell[0] >= 0:
-            ev.Skip()
-            return
-        self.ClearSelection()
+        if cell[0] < 0:
+            self.ClearSelection()
+        ev.Skip()
+
+    def check_key(self, ev):
+        if ev.GetKeyCode() == wx.WXK_CONTROL_A:
+            self.SelectAll()
+        ev.Skip()
 
     def dodge_first_column(self, row):
         if self.__table.GetNumberCols() > 1:
@@ -147,6 +152,8 @@ class ScoreSheet(wx.grid.Grid):
             self.dodge_first_column(ev.GetRow())
             return
 
+        self._selection_change_handler((self.__table.get_participant(ev.GetRow()), self.__table.get_problem(ev.GetCol())))
+
         if not self.IsSelection():
             self.SelectBlock(ev.GetRow(), ev.GetCol(), ev.GetRow(), ev.GetCol())
 
@@ -156,7 +163,8 @@ class ScoreSheet(wx.grid.Grid):
             self.DeselectCol(0)
             return
 
-        self._selection_change_handler and self._selection_change_handler(self.IsSelection())
+        if not self.IsSelection():
+            self._selection_change_handler(None)
 
     def get_selected(self):
         selected_cells = []
@@ -215,6 +223,7 @@ class ContestConfig:
 
 class ProblemResult:
     def __init__(self, data):
+        self.data = data
         if isinstance(data, str):
             self._score = 0
         elif isinstance(data, list):
@@ -309,51 +318,6 @@ class Contest:
     def close():
         # TODO: stop watching data and src
         Contest.singleton = None
-
-    @staticmethod
-    def _fake_data_view(parent):
-        ctrl = wx.dataview.DataViewListCtrl(parent)
-        ctrl.AppendTextColumn('name')
-        ctrl.AppendProgressColumn('problem1')
-        ctrl.AppendProgressColumn('problem2')
-        ctrl.AppendProgressColumn('problem3')
-        ctrl.AppendProgressColumn('problem4')
-
-        ctrl.AppendItem(['John', 10, 40, 20, 30])
-        ctrl.AppendItem(['Bob', 100, 20, 70, 50])
-        ctrl.AppendItem(['Alice', 10, 40, 20, 33])
-        ctrl.AppendItem(['David', 90, 60, 28, 40])
-        return ctrl
-
-    @staticmethod
-    def _fake_grid(parent):
-        grid = wx.grid.Grid(parent)
-        grid.EnableEditing(False)
-        # grid.DisableDragRowSize()
-        # grid.DisableDragColSize()
-        # grid.DisableDragGridSize()  # not working
-
-        grid.SetCornerLabelValue("I'm corner")
-
-        # grid.CreateGrid(3, 3)
-        # grid.SetColLabelValue(0, "Total")
-        # grid.SetColLabelValue(1, "Problem 1")
-        # grid.SetColLabelValue(2, "Problem 2")
-        # grid.SetColLabelValue(3, "Problem 3")
-        # grid.SetColLabelValue(4, "Problem 4")
-
-        # grid.SetRowLabelValue(0, "John")
-        # grid.SetRowLabelValue(1, "Bob")
-        # grid.SetRowLabelValue(2, "Alice")
-        
-        grid.SetTable(MyGridTable(), True)
-
-        grid.SetDefaultRenderer(MyRenderer())
-        
-        grid.SetSelectionForeground(wx.BLACK)
-        grid.SetGridLineColour(wx.WHITE)
-        # grid.UseNativeColHeader(True) # get rid of the annoying border around the first column header
-        return grid
 
 
 class ContestError(Exception):

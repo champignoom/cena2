@@ -119,13 +119,13 @@ class MainFrame(wx.Frame):
         self.status_panel = ProgramResultBar(lower_panel)
         lower_panel.GetSizer().Add(self.status_panel, wx.SizerFlags(1).Expand().Border(wx.TOP|wx.RIGHT, 5))
 
-        self.btn_judge_selected = wx.Button(lower_panel, label="Judge selected")
+        self.btn_judge_selected = wx.Button(lower_panel, label="&Judge selected")
         self.btn_judge_selected.Disable()
         self.Bind(wx.EVT_BUTTON, self._test_selected, self.btn_judge_selected)
         lower_panel.GetSizer().Add(self.btn_judge_selected, wx.SizerFlags(0).Border(wx.TOP, 5))
 
         self.status_panel.Bind(wx.EVT_LEFT_DOWN, self._click_status_box)
-        self._score_sheet._selection_change_handler = self.btn_judge_selected.Enable
+        self._score_sheet._selection_change_handler = self.handle_selection_change
 
         self.splitter_window.SplitHorizontally(self._score_sheet, lower_panel)
         # status_box.SetBackgroundColour(wx.RED)
@@ -136,6 +136,28 @@ class MainFrame(wx.Frame):
         self.Layout()
 
         self.Bind(wx.EVT_SIZE, self._on_resize) 
+
+    def handle_selection_change(self, focus):
+        if focus is None:
+            self.btn_judge_selected.Disable()
+            self.status_panel.clear_bar()
+        else:
+            # TODO: prevent selection change during testing
+            self.btn_judge_selected.Enable()
+            print('enabled, wtf, {}'.format(self.btn_judge_selected.IsEnabled()), flush=True)
+            participant, problem = focus
+            data = participant.result.problems.get(problem.name)
+            print(data, flush=True)
+            if data is None:
+                self.status_panel.set_message('Not tested')
+            elif isinstance(data.data, str):
+                self.status_panel.set_message(data.data)
+            else:
+                print(data, flush=True)
+                self.status_panel.make_placeholders(len(data.data))
+                for i,v in enumerate(data.data):
+                    self.status_panel.set_nth(i, result_color[v])
+            self.status_panel.Layout()
 
     def _on_resize(self, ev):
         # self.splitter_window.SetSashPosition( -self.btn_judge_selected.GetSize()[1] - self.splitter_window.GetSashSize() - 5)
