@@ -30,6 +30,13 @@ def split_every(n, gen):
         yield r
 
 
+class DefaultPropertiesDialog(wx.adv.PropertySheetDialog):
+    def __init__(self, parent):
+        super().__init__(parent, wx.ID_ANY, title="Default Properties")
+
+        self.CreateButtons(wx.OK | wx.CANCEL)  # | wx.HELP)
+
+
 class MainFrame(wx.Frame):
     TITLE = 'Cena2'
     SIZE = (800, 600)
@@ -99,6 +106,7 @@ class MainFrame(wx.Frame):
         else:
             self._close_contest_menu_item.Enable()
             self._render_contest()
+            self.Layout()
 
     def _render_contest(self):
         self._score_sheet = ScoreSheet(self, Contest.singleton)
@@ -156,7 +164,7 @@ class MainFrame(wx.Frame):
         self._close_contest_menu_item.Enable(False)
 
     def _properties(self, ev):
-        raise NotImplementedError
+        DefaultPropertiesDialog(self).ShowModal()
 
     def _participate_contest(self, ev):
         raise NotImplementedError
@@ -168,7 +176,19 @@ class MainFrame(wx.Frame):
         raise NotImplementedError
 
     def _show_about(self, ev):
-        raise NotImplementedError
+        info = wx.adv.AboutDialogInfo()
+        info.AddDeveloper(("John Doe"));
+        info.AddDocWriter(("Donald Duck"));
+        info.AddArtist(("Scrooge Mc.Duck"));
+        info.AddTranslator(("Mickey Mouse"));
+        info.SetDescription(("Sample wxWidgets application for testing wxAboutBox() function."));
+        info.SetName("Cena2");
+        icon = wx.Icon("arch-logo.ico")
+        icon = wx.GetApp().GetTopWindow().GetIcon()
+        print(icon)
+        info.SetIcon(icon);
+        info.SetLicence(("Public Domain"));
+        wx.adv.AboutBox(info);
 
     async def _do_test_selected(self):
         # TODO: fake modal: intercept clicks unless clicking 'cancel testing'
