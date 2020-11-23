@@ -123,8 +123,6 @@ class MainFrame(wx.Frame):
         # status_box.SetBackgroundColour(wx.RED)
         self.Layout()
 
-        self.Bind(wx.EVT_SIZE, self._on_resize) 
-
     def handle_focus_changed(self, focus):
         if focus is None:
             self.btn_judge_selected.Disable()
@@ -143,11 +141,6 @@ class MainFrame(wx.Frame):
                 for i,v in enumerate(data.data):
                     self.status_panel.set_nth(i, result_color[v])
             self.status_panel.Layout()
-
-    def _on_resize(self, ev):
-        # self.splitter_window.SetSashPosition( -self.btn_judge_selected.GetSize()[1] - self.splitter_window.GetSashSize() - 5)
-        self.splitter_window.SetSashPosition(-self._lower_height - self.splitter_window.GetSashSize())
-        self.Layout()
 
     # def _click_status_box(self, ev):
     #     self._score_sheet.ClearSelection()
