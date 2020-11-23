@@ -1,8 +1,10 @@
 import re
 import yaml
 import wx.dataview
+import wx.adv
 import wx.grid
 
+from utils import menu_bar, populate_menu, menu_item
 
 DATA_DIR_NAME = 'data'
 SRC_DIR_NAME = 'src'
@@ -63,6 +65,26 @@ class ScoreGridTable(wx.grid.GridTableBase):
         super().__init__()
         self.contest = contest
         self.ordered_names = sorted(contest.participants.keys())
+        self._order_col = None
+        self._order_reverse = None
+
+    def sort_by(self, col):
+        if self._order_col != col:
+            self._order_col = col
+            self._order_reverse = True
+        else:
+            self._order_reverse = not self._order_reverse
+
+        def key(name):
+            participant = self.contest.participants[name]
+            if col==0:
+                return participant.result.total()
+            problem = self.contest.config.problems[col-1]
+            if problem.name not in participant.result.problems:
+                return -1
+            return participant.result.problems[problem.name].total()
+
+        self.ordered_names.sort(key=key, reverse=self._order_reverse)
 
     def GetNumberRows(self):
         return len(self.ordered_names)
@@ -99,6 +121,14 @@ class ScoreGridTable(wx.grid.GridTableBase):
         return self.contest.config.problems[col-1]
 
 
+class ProblemConfigDialog(wx.adv.PropertySheetDialog):
+    def __init__(self, parent, problem):
+        super().__init__(parent, wx.ID_ANY)
+        self.problem = problem
+
+        self.CreateButtons(wx.OK | wx.CANCEL)  # | wx.HELP)
+
+
 class ScoreSheet(wx.grid.Grid):
     def __init__(self, parent, contest):
         super().__init__(parent)
@@ -130,6 +160,29 @@ class ScoreSheet(wx.grid.Grid):
 
         self.GetGridWindow().Bind(wx.EVT_LEFT_DOWN, self.check_click)
         self.GetGridWindow().Bind(wx.EVT_CHAR, self.check_key)
+        self.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.label_left_click)
+        self.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self.label_left_click)
+        self.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK, self.label_right_click)
+        self.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.label_right_click)
+
+    def sort_by(self, col):
+        self.GetTable().sort_by(col)
+        self.ForceRefresh()
+
+    def label_left_click(self, ev):
+        if ev.GetCol() != 0:
+            ev.Skip()
+            return
+
+        self.sort_by(ev.GetCol())
+
+    def label_right_click(self, ev):
+        menu = wx.Menu()
+        menu.Append(menu_item(self, "Sort by this column", lambda ev: self.sort_by(col)))
+        col = ev.GetCol()
+        if col > 0:
+            menu.Append(menu_item(self, "Configure this problem", lambda ev: ProblemConfigDialog(self, self.GetTable().contest.config.problems[col-1]).ShowModal()))
+        self.PopupMenu(menu)
 
     def check_click(self, ev):
         cell = self.XYToCell(self.CalcUnscrolledPosition(ev.GetPosition()))
