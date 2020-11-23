@@ -101,34 +101,26 @@ class MainFrame(wx.Frame):
             self._render_contest()
 
     def _render_contest(self):
-        self.splitter_window = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE | wx.SP_BORDER)
-        self.GetSizer().Add(self.splitter_window, wx.SizerFlags(1).Expand().Border(wx.ALL, 10))
-
-        self._score_sheet = ScoreSheet(self.splitter_window, Contest.singleton)
+        self._score_sheet = ScoreSheet(self, Contest.singleton)
         self._score_sheet.SetMinSize((0,0))  # otherwise it grows greedly
-        self.splitter_window.Initialize(self._score_sheet)
+        self.GetSizer().Add(self._score_sheet, wx.SizerFlags(1).Expand().Border(wx.ALL, 10))
 
-        lower_panel = wx.Panel(self.splitter_window)
-        lower_panel.SetSizer(wx.BoxSizer(wx.HORIZONTAL))
+        lower_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.GetSizer().Add(lower_sizer, wx.SizerFlags().Expand().Border(wx.ALL ^ wx.TOP, 10))
 
-        self.status_panel = ProgramResultBar(lower_panel)
-        lower_panel.GetSizer().Add(self.status_panel, wx.SizerFlags(1).Expand().Border(wx.TOP|wx.RIGHT, 5))
+        self.status_panel = ProgramResultBar(self)
+        lower_sizer.Add(self.status_panel, wx.SizerFlags(1).Expand().Border(wx.TOP|wx.RIGHT, 5))
 
-        self.btn_judge_selected = wx.Button(lower_panel, label="&Judge selected")
+        self.btn_judge_selected = wx.Button(self, label="&Judge selected")
         self.btn_judge_selected.Disable()
         self.Bind(wx.EVT_BUTTON, self._test_selected, self.btn_judge_selected)
-        lower_panel.GetSizer().Add(self.btn_judge_selected, wx.SizerFlags(0).Border(wx.TOP, 5))
+        lower_sizer.Add(self.btn_judge_selected, wx.SizerFlags(0).Border(wx.TOP, 5))
 
         # self.status_panel.Bind(wx.EVT_LEFT_DOWN, self._click_status_box)
         self._score_sheet._selection_change_handler = self.btn_judge_selected.Enable
         self._score_sheet._focus_changed = self.handle_focus_changed
 
-        self.splitter_window.SplitHorizontally(self._score_sheet, lower_panel)
         # status_box.SetBackgroundColour(wx.RED)
-        self.Layout()
-
-        self._lower_height = self.btn_judge_selected.GetSize()[1] + 5
-        self.splitter_window.SetSashPosition(-self._lower_height - self.splitter_window.GetSashSize())
         self.Layout()
 
         self.Bind(wx.EVT_SIZE, self._on_resize) 
