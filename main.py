@@ -30,11 +30,39 @@ def split_every(n, gen):
         yield r
 
 
-class DefaultPropertiesDialog(wx.adv.PropertySheetDialog):
+class DefaultPropertiesDialog(wx.Dialog):
     def __init__(self, parent):
-        super().__init__(parent, wx.ID_ANY, title="Default Properties")
+        super().__init__(parent, wx.ID_ANY, style=wx.RESIZE_BORDER, title="Default Config")
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        panel = wx.Panel(self, wx.ID_ANY)
+        sizer.Add(panel, wx.SizerFlags(1).Expand().Border(wx.ALL, 5))
 
-        self.CreateButtons(wx.OK | wx.CANCEL)  # | wx.HELP)
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        grid_sizer = wx.FlexGridSizer(2, 10, 10)
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Time limit"), wx.SizerFlags().Right().CenterVertical())
+        time_limit_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        time_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
+        time_limit_ctrl.SetHint("1")
+        time_limit_sizer.Add(time_limit_ctrl)
+        time_limit_sizer.Add(wx.StaticText(panel, wx.ID_ANY, label="s"), wx.SizerFlags().CenterVertical().Border(wx.LEFT, 5))
+        grid_sizer.Add(time_limit_sizer)
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Memory limit"), wx.SizerFlags().Right().CenterVertical())
+        memory_limit_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        memory_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
+        memory_limit_ctrl.SetHint("512")
+        memory_limit_sizer.Add(memory_limit_ctrl)
+        memory_limit_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "MB"), wx.SizerFlags().CenterVertical().Border(wx.LEFT, 5))
+        grid_sizer.Add(memory_limit_sizer)
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Total score"), wx.SizerFlags().Right().CenterVertical())
+        total_score_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
+        total_score_ctrl.SetHint("100")
+        grid_sizer.Add(total_score_ctrl)
+        panel_sizer.Add(grid_sizer, wx.SizerFlags(1).Expand())
+        panel.SetSizer(panel_sizer)
+
+        sizer.Add(self.CreateButtonSizer(wx.OK | wx.CANCEL), wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
+
+        self.SetSizerAndFit(sizer)
 
 
 class MainFrame(wx.Frame):

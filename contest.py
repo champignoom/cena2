@@ -121,12 +121,57 @@ class ScoreGridTable(wx.grid.GridTableBase):
         return self.contest.config.problems[col-1]
 
 
-class ProblemConfigDialog(wx.adv.PropertySheetDialog):
+class ProblemConfigDialog(wx.Dialog):
     def __init__(self, parent, problem):
-        super().__init__(parent, wx.ID_ANY)
+        super().__init__(parent, wx.ID_ANY, style=wx.RESIZE_BORDER, title="Problem Config")
         self.problem = problem
 
-        self.CreateButtons(wx.OK | wx.CANCEL)  # | wx.HELP)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        panel = wx.Panel(self, wx.ID_ANY)
+        sizer.Add(panel, wx.SizerFlags(1).Expand().Border(wx.ALL, 5))
+
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        grid_sizer = wx.FlexGridSizer(2, 10, 10)
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Name"), wx.SizerFlags().Right().CenterVertical())
+        grid_sizer.Add(wx.TextCtrl(panel, wx.ID_ANY))
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Chinese name"), wx.SizerFlags().Right().CenterVertical())
+        grid_sizer.Add(wx.TextCtrl(panel, wx.ID_ANY))
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Time limit"), wx.SizerFlags().Right().CenterVertical())
+        time_limit_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        time_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
+        time_limit_ctrl.SetHint("1")
+        time_limit_sizer.Add(time_limit_ctrl)
+        time_limit_sizer.Add(wx.StaticText(panel, wx.ID_ANY, label="s"), wx.SizerFlags().CenterVertical().Border(wx.LEFT, 5))
+        grid_sizer.Add(time_limit_sizer)
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Memory limit"), wx.SizerFlags().Right().CenterVertical())
+        memory_limit_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        memory_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
+        memory_limit_ctrl.SetHint("512")
+        memory_limit_sizer.Add(memory_limit_ctrl)
+        memory_limit_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "MB"), wx.SizerFlags().CenterVertical().Border(wx.LEFT, 5))
+        grid_sizer.Add(memory_limit_sizer)
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Total score"), wx.SizerFlags().Right().CenterVertical())
+        total_score_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
+        total_score_ctrl.SetHint("100")
+        grid_sizer.Add(total_score_ctrl)
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Testcases"), wx.SizerFlags().Right().CenterVertical())
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "<Not Implemented>"))
+        panel_sizer.Add(grid_sizer, wx.SizerFlags(1).Expand())
+        panel.SetSizer(panel_sizer)
+
+        sizer.Add(self.CreateButtonSizer(wx.OK | wx.CANCEL), wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
+
+        self.SetSizerAndFit(sizer)
+
+
+        # time limit
+        # memory limit
+        # chinese name
+        # name
+        # total score
+        # (show autodetected testcases, update when name is modified, or:)
+        # testcases
+        #   input, output, score
 
 
 class ScoreSheet(wx.grid.Grid):
@@ -152,7 +197,6 @@ class ScoreSheet(wx.grid.Grid):
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self.check_select_range)
         # self.Bind(wx.EVT_LEFT_DOWN, self.process_mouse)
 
-        print('selectionforeground={}, cellbackground={}, '.format(self.GetSelectionForeground(), self.GetDefaultCellBackgroundColour()), flush=True)
         # self.SetSelectionForeground(wx.RED)
         self.SetCellHighlightPenWidth(0)  # no cursor border
 
