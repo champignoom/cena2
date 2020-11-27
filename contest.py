@@ -19,6 +19,13 @@ CONFIG_TOTAL_SCORE = 'total score'
 CONFIG_CN_NAME = 'chinese name'
 
 
+def try_int(s):
+    try:
+        return int(s)
+    except ValueError:
+        return s
+
+
 class MyRenderer(wx.grid.GridCellRenderer):
     BORDER_WIDTH = 3
 
@@ -152,8 +159,12 @@ class ProblemConfigDialog(wx.Dialog):
         self._total_score_ctrl.SetHint("100")
         grid_sizer.Add(self._total_score_ctrl)
 
-        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Testcases"), wx.SizerFlags().Right().CenterVertical())
-        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "<Not Implemented>"))
+        grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Testcases"), wx.SizerFlags().Right())
+        self._test_cases_view = wx.ListView(self)
+        self._test_cases_view.AppendColumn("Input file")
+        self._test_cases_view.AppendColumn("Output file")
+        self.__refresh_test_case()
+        grid_sizer.Add(self._test_cases_view)
         panel_sizer.Add(grid_sizer, wx.SizerFlags(1).Expand())
         panel.SetSizer(panel_sizer)
 
@@ -162,10 +173,28 @@ class ProblemConfigDialog(wx.Dialog):
         self.SetSizerAndFit(sizer)
 
         self.Bind(wx.EVT_BUTTON, self.__on_ok, id=wx.ID_OK)
+        self._name_ctrl.Bind(wx.EVT_TEXT, self.__on_edit_name)
 
     def __on_ok(self, ev):
         if self.__save_config():
             self.Close()
+
+    def __on_edit_name(self, ev):
+        if self._name_ctrl.IsEmpty():
+            return
+
+        self.__refresh_test_case()
+
+    def __refresh_test_case(self):
+        self._test_cases_view.DeleteAllItems()
+
+        name = self._name_ctrl.GetValue()
+        data_path = Contest.singleton.path/DATA_DIR_NAME/name
+        tmp_testcases = Problem.get_tmp_testcases(data_path, name)
+        if not tmp_testcases:
+            return
+        for t in tmp_testcases:
+            self._test_cases_view.Append((t.input_file_path.relative_to(data_path), t.output_file_path.relative_to(data_path)))
 
     def __save_config(self):
         """
@@ -187,6 +216,8 @@ class ProblemConfigDialog(wx.Dialog):
         except (TypeError, ValueError) as e:
             wx.MessageBox(str(e))
             return False
+
+        self.problem.refresh_tmp_testcases(Contest.singleton.path/DATA_DIR_NAME)
 
         Contest.singleton.save_config()
 
@@ -318,7 +349,7 @@ class TestCase:
 
 
 class Problem:
-    def __init__(self, data_path, data):
+    def __init__(self, data_root, data):
         if isinstance(data, str):
             self.name = data
             self.__assign_vals()
@@ -339,15 +370,20 @@ class Problem:
         else:
             raise ContestError
 
-        self.tmp_testcases = []
+        self.data_path = data_root/self.name
+        self.refresh_tmp_testcases()
 
-        data_path /= self.name
+    def refresh_tmp_testcases(self):
+        self.tmp_testcases = Problem.get_tmp_testcases(self.data_path, self.name)
+
+    @staticmethod
+    def get_tmp_testcases(data_path, name):
         if not data_path.is_dir():
             return
 
-        input_file_paths = set(data_path.glob(self.name+'*.in')) & {p.with_suffix('.in') for p in data_path.glob(self.name+'*.out')}
-        input_file_paths = sorted(input_file_paths, key=lambda s: re.split(r'(\d+)', s.name))
-        self.tmp_testcases = [TestCase(i, i.with_suffix('.out')) for i in input_file_paths]
+        input_file_paths = set(data_path.glob(name+'*.in')) & {p.with_suffix('.in') for p in data_path.glob(name+'*.out')}
+        input_file_paths = sorted(input_file_paths, key=lambda s: tuple(map(try_int, re.split(r'(\d+)', s.name))))
+        return [TestCase(i, i.with_suffix('.out')) for i in input_file_paths]
 
     def __assign_vals(self, /, cn_name=None, time_limit=None, memory_limit=None, total_score=None):
         self.cn_name = cn_name
