@@ -13,6 +13,11 @@ PROBLEMS_FILE_NAME = 'problems.pdf'
 CONTEST_CONFIG_FILE_NAME = 'config.yaml'
 RESULT_FILE_NAME = 'result.yaml'
 
+CONFIG_TIME_LIMIT = 'time limit'
+CONFIG_MEMORY_LIMIT = 'memory limit'
+CONFIG_TOTAL_SCORE = 'total score'
+CONFIG_CN_NAME = 'chinese name'
+
 
 class MyRenderer(wx.grid.GridCellRenderer):
     BORDER_WIDTH = 3
@@ -38,26 +43,6 @@ class MyRenderer(wx.grid.GridCellRenderer):
 
         dc.SetTextForeground(grid.GetSelectionForeground() if is_selected else attr.GetTextColour())
         dc.DrawLabel(r[1], rect, wx.ALIGN_CENTER)
-
-
-class MyGridTable(wx.grid.GridTableBase):
-    def GetNumberRows(self):
-        return 30
-
-    def GetNumberCols(self):
-        return 5
-
-    def GetRowLabelValue(self, row):
-        return ('John', 'Bob', 'Alice')[row%3]
-
-    def GetColLabelValue(self, col):
-        return 'Problem {}'.format(col)
-
-    def GetValue(self, row, col):
-        return (row+1)/(col+1)
-
-    def SetValue(self, row, col, value):
-        pass
 
 
 class ScoreGridTable(wx.grid.GridTableBase):
@@ -96,7 +81,10 @@ class ScoreGridTable(wx.grid.GridTableBase):
         return self.ordered_names[row]
 
     def GetColLabelValue(self, col):
-        return 'Total' if col==0 else self.contest.config.problems[col-1].name
+        if col==0:
+            return 'Total'
+        p = self.contest.config.problems[col-1]
+        return p.name if p.cn_name is None else p.cn_name
 
     def GetValue(self, row, col):
         r = self.contest.participants[self.ordered_names[row]].result
@@ -123,7 +111,7 @@ class ScoreGridTable(wx.grid.GridTableBase):
 
 class ProblemConfigDialog(wx.Dialog):
     def __init__(self, parent, problem):
-        super().__init__(parent, wx.ID_ANY, style=wx.RESIZE_BORDER, title="Problem Config")
+        super().__init__(parent, wx.ID_ANY, style=wx.RESIZE_BORDER, title=f"Problem Config: {problem.name}")
         self.problem = problem
 
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -132,28 +120,38 @@ class ProblemConfigDialog(wx.Dialog):
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
         grid_sizer = wx.FlexGridSizer(2, 10, 10)
+
+        # TODO: validators
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Name"), wx.SizerFlags().Right().CenterVertical())
-        grid_sizer.Add(wx.TextCtrl(panel, wx.ID_ANY))
+        self._name_ctrl = wx.TextCtrl(panel, wx.ID_ANY, value=self.problem.name)
+        grid_sizer.Add(self._name_ctrl)
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Chinese name"), wx.SizerFlags().Right().CenterVertical())
-        grid_sizer.Add(wx.TextCtrl(panel, wx.ID_ANY))
+        self._cn_name_ctrl = wx.TextCtrl(panel, wx.ID_ANY, value=self.problem.cn_name or "")
+        grid_sizer.Add(self._cn_name_ctrl)
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Time limit"), wx.SizerFlags().Right().CenterVertical())
         time_limit_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        time_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
-        time_limit_ctrl.SetHint("1")
-        time_limit_sizer.Add(time_limit_ctrl)
+        self._time_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY, value=str(self.problem.time_limit or ""))
+        self._time_limit_ctrl.SetHint("1")
+        time_limit_sizer.Add(self._time_limit_ctrl)
         time_limit_sizer.Add(wx.StaticText(panel, wx.ID_ANY, label="s"), wx.SizerFlags().CenterVertical().Border(wx.LEFT, 5))
         grid_sizer.Add(time_limit_sizer)
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Memory limit"), wx.SizerFlags().Right().CenterVertical())
         memory_limit_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        memory_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
-        memory_limit_ctrl.SetHint("512")
-        memory_limit_sizer.Add(memory_limit_ctrl)
+        self._memory_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY, value=str(self.problem.memory_limit or ""))
+        self._memory_limit_ctrl.SetHint("512")
+        memory_limit_sizer.Add(self._memory_limit_ctrl)
         memory_limit_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "MB"), wx.SizerFlags().CenterVertical().Border(wx.LEFT, 5))
         grid_sizer.Add(memory_limit_sizer)
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Total score"), wx.SizerFlags().Right().CenterVertical())
-        total_score_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
-        total_score_ctrl.SetHint("100")
-        grid_sizer.Add(total_score_ctrl)
+        self._total_score_ctrl = wx.TextCtrl(panel, wx.ID_ANY, value=str(self.problem.total_score or ""))
+        self._total_score_ctrl.SetHint("100")
+        grid_sizer.Add(self._total_score_ctrl)
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Testcases"), wx.SizerFlags().Right().CenterVertical())
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "<Not Implemented>"))
         panel_sizer.Add(grid_sizer, wx.SizerFlags(1).Expand())
@@ -162,6 +160,37 @@ class ProblemConfigDialog(wx.Dialog):
         sizer.Add(self.CreateButtonSizer(wx.OK | wx.CANCEL), wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
 
         self.SetSizerAndFit(sizer)
+
+        self.Bind(wx.EVT_BUTTON, self.__on_ok, id=wx.ID_OK)
+
+    def __on_ok(self, ev):
+        if self.__save_config():
+            self.Close()
+
+    def __save_config(self):
+        """
+        Return True if sucessfully saved.
+        Otherwise return False and the dialog is supposed to be preservedd.
+        """
+        new_name = self._name_ctrl.GetValue()
+        if new_name and new_name != self.problem.name and Contest.singleton.config.exist_problem_with_name(new_name):
+            wx.MessageBox(f"Problem {new_name} already exists")
+            return False
+
+        try:
+            self.problem.name         = None if self._name_ctrl.IsEmpty()         else self._name_ctrl.GetValue()
+            self.problem.cn_name      = None if self._cn_name_ctrl.IsEmpty()      else self._cn_name_ctrl.GetValue()
+            self.problem.time_limit   = None if self._time_limit_ctrl.IsEmpty()   else float(self._time_limit_ctrl.GetValue())
+            self.problem.memory_limit = None if self._memory_limit_ctrl.IsEmpty() else float(self._memory_limit_ctrl.GetValue())
+            self.problem.total_score  = None if self._total_score_ctrl.IsEmpty()  else int(self._total_score_ctrl.GetValue())
+            # FIXME: exclude negative value
+        except (TypeError, ValueError) as e:
+            wx.MessageBox(str(e))
+            return False
+
+        Contest.singleton.save_config()
+
+        return True
 
 
         # time limit
@@ -207,7 +236,7 @@ class ScoreSheet(wx.grid.Grid):
         self.Bind(wx.grid.EVT_GRID_LABEL_LEFT_CLICK, self.label_left_click)
         self.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self.label_left_click)
         self.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK, self.label_right_click)
-        self.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.label_right_click)
+        # self.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.label_right_click)
 
     def sort_by(self, col):
         self.GetTable().sort_by(col)
@@ -292,20 +321,53 @@ class Problem:
     def __init__(self, data_path, data):
         if isinstance(data, str):
             self.name = data
-            self.tmp_testcases = []
-
-            data_path /= self.name
-            if not data_path.is_dir():
-                return
-
-            input_file_paths = set(data_path.glob(self.name+'*.in')) & {p.with_suffix('.in') for p in data_path.glob(self.name+'*.out')}
-            input_file_paths = sorted(input_file_paths, key=lambda s: re.split(r'(\d+)', s.name))
-            self.tmp_testcases = [TestCase(i, i.with_suffix('.out')) for i in input_file_paths]
+            self.__assign_vals()
+        elif isinstance(data, dict):
+            if len(data)!=1:
+                raise ContestError
+            self.name = list(data.keys())[0]
+            if not isinstance(self.name, str) or not re.fullmatch(r'[a-z]+', self.name):
+                raise ContestError(f"wrong name format: {self.name}")
+            val = data[self.name] or {}
+            self.__assign_vals(
+                    cn_name = val.get(CONFIG_CN_NAME),
+                    time_limit = val.get(CONFIG_TIME_LIMIT),
+                    memory_limit = val.get(CONFIG_MEMORY_LIMIT),
+                    total_score = val.get(CONFIG_TOTAL_SCORE),
+                    )
+            # TODO: warn extra arguments
         else:
-            raise NotImplementedError
+            raise ContestError
+
+        self.tmp_testcases = []
+
+        data_path /= self.name
+        if not data_path.is_dir():
+            return
+
+        input_file_paths = set(data_path.glob(self.name+'*.in')) & {p.with_suffix('.in') for p in data_path.glob(self.name+'*.out')}
+        input_file_paths = sorted(input_file_paths, key=lambda s: re.split(r'(\d+)', s.name))
+        self.tmp_testcases = [TestCase(i, i.with_suffix('.out')) for i in input_file_paths]
+
+    def __assign_vals(self, /, cn_name=None, time_limit=None, memory_limit=None, total_score=None):
+        self.cn_name = cn_name
+        self.time_limit = time_limit and float(time_limit)
+        self.memory_limit = memory_limit and float(memory_limit)
+        self.total_score = total_score and int(total_score)
 
     def get_testcases(self):
         return self.tmp_testcases
+
+    def to_dict(self):
+        # TODO: testcases
+        d = {
+                CONFIG_CN_NAME: self.cn_name,
+                CONFIG_TIME_LIMIT: self.time_limit,
+                CONFIG_MEMORY_LIMIT: self.memory_limit,
+                CONFIG_TOTAL_SCORE: self.total_score,
+                }
+        d = {k:v for k,v in d.items() if v is not None}
+        return self.name if not d else {self.name: d}
 
     def __repr__(self):
         return '<Problem {}>'.format(self.name)
@@ -315,8 +377,11 @@ class ContestConfig:
     def __init__(self, contest_path, data):
         self.problems = [Problem(contest_path/DATA_DIR_NAME, p) for p in data]
 
-    def dump(self, path):
-        raise NotImplementedError
+    def exist_problem_with_name(self, name):
+        return any(p.name == new_name for p in self.problems)
+
+    def to_dict(self):
+        return [p.to_dict() for p in self.problems]
 
 
 class ProblemResult:
@@ -389,6 +454,10 @@ class Contest:
         self.config = config
         self.participants = {p.name: Participant(p) for p in (path/SRC_DIR_NAME).iterdir()}
 
+    def save_config(self):
+        with open(self.path/CONTEST_CONFIG_FILE_NAME, 'w') as f:
+            yaml.dump(self.config.to_dict(), f, Dumper=yaml.CDumper, encoding='utf-8', allow_unicode=True)
+
     @staticmethod
     def init_and_open(path):
         assert (path/DATA_DIR_NAME).is_dir()
@@ -402,8 +471,8 @@ class Contest:
             problem_names.append(sub.name)
 
         config = ContestConfig(path, problem_names)
-        config.dump(path / CONTEST_CONFIG_FILE_NAME)
         Contest.singleton = Contest(path, config)
+        Contest.singleton.save_config()
 
     @staticmethod
     def open(path):

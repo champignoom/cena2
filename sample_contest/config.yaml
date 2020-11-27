@@ -1,4 +1,7 @@
 - plus
-- minus
-- times
+- minus:
+    chinese name: 减法
+    time limit: 1.4
+- times:
+    chinese name: 乘法
 - divide

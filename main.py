@@ -11,6 +11,7 @@ import resource
 import asyncio
 import multiprocessing
 import os
+import signal
 from itertools import islice
 from contest import (
         Contest, ContestError, ScoreSheet,
@@ -30,7 +31,14 @@ def split_every(n, gen):
         yield r
 
 
+def get_global_config_path():
+    # TODO: handle windows
+    return Path.home() / ".cena2"
+
+
 class DefaultPropertiesDialog(wx.Dialog):
+    # TODO: reset default
+    # TODO: save to home
     def __init__(self, parent):
         super().__init__(parent, wx.ID_ANY, style=wx.RESIZE_BORDER, title="Default Config")
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -39,6 +47,7 @@ class DefaultPropertiesDialog(wx.Dialog):
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
         grid_sizer = wx.FlexGridSizer(2, 10, 10)
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Time limit"), wx.SizerFlags().Right().CenterVertical())
         time_limit_sizer = wx.BoxSizer(wx.HORIZONTAL)
         time_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
@@ -46,6 +55,7 @@ class DefaultPropertiesDialog(wx.Dialog):
         time_limit_sizer.Add(time_limit_ctrl)
         time_limit_sizer.Add(wx.StaticText(panel, wx.ID_ANY, label="s"), wx.SizerFlags().CenterVertical().Border(wx.LEFT, 5))
         grid_sizer.Add(time_limit_sizer)
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Memory limit"), wx.SizerFlags().Right().CenterVertical())
         memory_limit_sizer = wx.BoxSizer(wx.HORIZONTAL)
         memory_limit_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
@@ -53,15 +63,16 @@ class DefaultPropertiesDialog(wx.Dialog):
         memory_limit_sizer.Add(memory_limit_ctrl)
         memory_limit_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "MB"), wx.SizerFlags().CenterVertical().Border(wx.LEFT, 5))
         grid_sizer.Add(memory_limit_sizer)
+
         grid_sizer.Add(wx.StaticText(panel, wx.ID_ANY, "Total score"), wx.SizerFlags().Right().CenterVertical())
         total_score_ctrl = wx.TextCtrl(panel, wx.ID_ANY)
         total_score_ctrl.SetHint("100")
         grid_sizer.Add(total_score_ctrl)
+
         panel_sizer.Add(grid_sizer, wx.SizerFlags(1).Expand())
         panel.SetSizer(panel_sizer)
 
         sizer.Add(self.CreateButtonSizer(wx.OK | wx.CANCEL), wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
-
         self.SetSizerAndFit(sizer)
 
 
@@ -94,7 +105,7 @@ class MainFrame(wx.Frame):
             ]))
         self._close_contest_menu_item.Enable(False)
 
-        # 1 and wx.CallAfter(lambda: self._open_contest(None))
+        1 and wx.CallAfter(lambda: self._open_contest(None))
 
     def _open_contest_prepare(self):
         if Contest.singleton is not None:
@@ -129,8 +140,8 @@ class MainFrame(wx.Frame):
     def _open_contest(self, ev):
         try:
             self._open_contest_prepare()
-        except ContestError:
-            pass
+        except ContestError as s:
+            print(s, flush=True)
         else:
             self._close_contest_menu_item.Enable()
             self._render_contest()
@@ -291,24 +302,37 @@ class MainFrame(wx.Frame):
         if await process.wait() != 0:
             return 'Compilation Error'
 
+    @staticmethod
+    def _handle_signals():
+        signal.signal(signal.SIGFPE, lambda: os.exit(5))
+
     def _judge_test_case(self, test_dir, exe_path, participant, problem, testcase):
         shutil.copy(testcase.input_file_path, test_dir/(problem.name+'.in'))
         # TODO: TLE, MLE
         # TODO: refactor exe path
+        time_limit = problem.time_limit or 0.9
+        memory_limit = problem.memory_limit or 128
 
+        start_time = time.time()
+        end_time = None
         process = subprocess.Popen([str(exe_path)], cwd=test_dir,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                # preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_AS, (128*2**20, 128*2**20))   # results in an ambiguous SIGKILL
+                preexec_fn=MainFrame._handle_signals,   # FIXME: doesn't work, must handle in c. see <https://stackoverflow.com/q/65042144>
                 )
 
         process_result = None
         def waiter():
             nonlocal process_result
+            nonlocal end_time
             process_result = os.wait4(process.pid, 0)
+            end_time = time.time()
+
         timer_thread = threading.Thread(target=waiter)
         timer_thread.start()
-        timer_thread.join(0.9)
+        timer_thread.join(time_limit)
         # print(process_result)
+        print(f'ellapsed time: {end_time - start_time if end_time is not None else "TLE"}', flush=True)
+
         if timer_thread.is_alive():
             # TODO FIXME: kill thread by killing process
             process.kill()
@@ -316,11 +340,12 @@ class MainFrame(wx.Frame):
             result = 'Time Limit Exceeded'
         elif process_result[1] != 0:
             result = 'Runtime Error'
+            print(f'error code = {process_result[1]}', flush=True)
         elif not (test_dir/(problem.name+'.out')).is_file():
             result = 'Output Not Found'
         elif not filecmp.cmp(test_dir/(problem.name+'.out'), testcase.output_file_path):
             result = 'Wrong Answer'
-        elif process_result[2].ru_maxrss > 128*1024:
+        elif process_result[2].ru_maxrss > memory_limit*1024:
             # TODO: ru_maxrss is highly plantform-dependent
             result = 'Memory Limit Exceeded'
         else:
